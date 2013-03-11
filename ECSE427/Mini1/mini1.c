@@ -1,20 +1,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <alloca.h>
+#include <sys/resource.h>
 
-int global[5];
-int global2[] = {0,1,2,3};
+extern unsigned long __executable_start;
+extern unsigned long __etext;
+extern unsigned long edata;
+extern unsigned long end;
 int main(int argc, char* argv){
-    int i;
-    int* j = (int*)malloc(sizeof(int));
-    printf("Location: %p\n", &j);
-    int* k = (int*)malloc(sizeof(int));
-    printf("Location: %p\n", &k);
-    int* l = (int*)alloca(sizeof(int));
-    printf("Location: %p\n", &l);
-    int* m = (int*)alloca(sizeof(int));
-    printf("Location: %p\n", &m);
-    printf("Location main: %p\n", main);
-    printf("BSS starts at: %p\n", global);
-    printf("Data starts at: %p\n", global2);
+	struct rlimit stack_limit;
+	struct rlimit data_limit;
+	getrlimit(RLIMIT_STACK, &stack_limit);
+	getrlimit(RLIMIT_DATA, &data_limit);
+	printf("Text segment           starts at: 0x%x ends at: 0x%x\n",&__executable_start, &__etext);
+	printf("Data segment           starts at: 0x%x ends at: 0x%x\n",&__etext, &edata);
+	printf("BSS segment            starts at: 0x%x ends at: 0x%x\n",&edata, &end);
+	printf("Heap                   starts at: 0x%x ends at: %p\n", &end, sbrk(0));
+	printf("Memory mapping segment starts at: %p ends at: %p\n", sbrk(0), stack_limit.rlim_cur);
+	printf("Stack                  starts at: %p ends at: %p\n", stack_limit.rlim_cur, argv);
 }
