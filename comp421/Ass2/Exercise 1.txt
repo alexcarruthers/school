@@ -91,15 +91,23 @@
 	FROM Place 
 	WHERE population = (SELECT Max(Population) 
 				FROM Place);
---Question 10 (works with MySQL):
-	SELECT Person.pid, group_concat(Property.name) AS PlacesLivedIn 
+--Question 10 (array_agg: PostgreSQL, equivalent for MySQL is group_concat):
+	SELECT Person.pid, array_agg(Property.name) AS PlacesLivedIn 
 	FROM Person 
 	LEFT OUTER JOIN Property ON Person.pid = Property.pid 
 	GROUP BY pid;
---Question 11 (works with MySQL):
-	SELECT Person.pid, group_concat(Property.name) AS PlacesLivedIn, COUNT(Property.name) AS NumberPlaces 
+--Question 11 (array_agg: PostgreSQL, equivalent for MySQL is group_concat):
+	SELECT Person.pid, array_agg(Property.name) AS PlacesLivedIn, COUNT(Property.name) AS NumberPlaces 
 	FROM Person 
 	LEFT OUTER JOIN Property 
 	ON Person.pid = Property.pid 
 	GROUP BY pid;
 --Question 12:
+	CREATE TRIGGER UPDATE_POPULATION
+		AFTER INSERT ON LivesIn
+		REFERENCING NEW AS n
+		FOR EACH ROW 
+		UPDATE Place p
+		WHEN p.name = n.name AND p.province = n.province
+		SET p.population = p.population + 1
+		
