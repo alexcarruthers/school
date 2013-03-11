@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<CoursesandInstructors>
+	<Instructors>
+		<Instructor iid= 01 give= 02 03>
+			<name>Robillard</name>
+			<email>martin.robillard@mcgill.ca</email>
+			<department>SOCS</department>
+		</Instructor>
+		<Instructor iid= 02 give= 01 02>
+			<name>Kienzle</name>
+			<email>joberg.kienzle@mcgill.ca</email>
+			<department>SOCS</department>
+		</Instructor>
+	</Instructors>
+	<Courses>
+		<Course cid= 01>
+			<ID>COMP-202</ID>
+			<name>Foundations of Programming</name>
+		</Course>
+		<Course cid= 02 pre-req= 01>
+			<ID>COMP-303</ID>
+			<name>Software Development</name>
+		</Course>
+		<Course cid= 03 pre-req= 02>
+			<ID>COMP-529</ID>
+			<name>Software Architecture</name>
+		</Course>
+	</Courses>
+</CoursesandInstructors>

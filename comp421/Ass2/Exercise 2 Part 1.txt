@@ -1,0 +1,4 @@
+To model this E/R diagram, I would split it into two parts: Instructors and Courses.
+Courses would have the following elements: ID and name. It would also have the following attributes: cid (course ID) and pre-req (courses that are required to take this course)
+Instructors would have the following elements: name, email and department. It would also have the following attributes: iid (instructor id) and give (courses that the instructor is a potential teacher for).
+Details can be seen in the Exercise2.xml file.

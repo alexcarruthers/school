@@ -1,0 +1,15 @@
+a)
+/bib/book[@year=2012 and publisher='Addison-Wesley']/title
+b)
+/bib/book[count(author)>1]
+c)
+let $x in document("bib.xml")/bib/book[author='SergeAbiteboul']
+where $x/author/first = 'Serge' and $x/author/last = 'Abiteboul'
+return <SergeBooks> $x </SergeBooks>
+d)
+/bib/*[editor/last = 'Wiekum']
+e)
+let $magazine = document('bib.xml')/bib/magazine/title
+let $book = document('bib.xml')/bib/book/title
+where $magazine = $book
+return <result> $magazine </result>

@@ -1,0 +1,105 @@
+--EXERCISE 1: 
+--Question 1a:
+	SELECT Person.pname 
+	FROM Person 
+	INNER JOIN Place ON Person.pid=Place.mayorid 
+	WHERE Place.name = "Montreal";
+--Question 1b:
+	SELECT Person.pname 
+	FROM Person 
+	WHERE Person.pid IN (SELECT Place.mayorid 
+				FROM Place 
+				WHERE Place.name = "Montreal");
+--Question 1c:
+	SELECT Person.pname 
+	FROM Person 
+	WHERE EXISTS (SELECT * 
+			FROM Place 
+			WHERE Place.name="Montreal" 
+			AND Place.mayorid = Person.pid);
+--Question 2a:
+	SELECT pid 
+	FROM Property 
+	WHERE name="Montreal" AND province="Quebec" 
+	INTERSECT ALL 
+	SELECT pid 
+	FROM Property 
+	WHERE name="Mont-Tremblant" AND province="Quebec";
+--Question 2b:
+	SELECT Property.pid 
+	FROM Property 
+	WHERE name="Montreal" AND province="Quebec" 
+	AND Property.pid IN (SELECT Property.pid 
+				FROM Property 
+				WHERE name="Mont-Tremblant" AND province="Quebec");
+--Question 3a:
+	SELECT DISTINCT P1.pid 
+	FROM Property P1 
+	JOIN Property P2 ON P1.pid=P2.pid 
+	WHERE P1.name != P2.name AND P1.province != P2.province;
+--Question 3b:
+	SELECT pid 
+	FROM Property 
+	GROUP BY pid HAVING COUNT(*) >=2;
+--Question 3c:
+	SELECT DISTINCT Person.pid 
+	FROM Person 
+	WHERE 1<(SELECT COUNT(*) 
+			FROM Property 
+			WHERE Property.pid = Person.pid);
+--Question 4:
+	SELECT DISTINCT Person.pname 
+	FROM Place 
+	LEFT JOIN Property ON Property.pid = Place.mayorid 
+	LEFT JOIN Person ON Person.pid = Place.mayorid 
+	WHERE Property.pid = Place.mayorid;
+--Question 5:
+	SELECT pname 
+	FROM Place 
+	LEFT JOIN Person ON Person.pid = Place.mayorid 
+	WHERE NOT EXISTS (SELECT * 
+				FROM Property 
+				WHERE Property.pid = Place.mayorid);
+--Question 6:
+	SELECT Province 
+	FROM (SELECT Province, Max(Population) AS max 
+		FROM Place 
+		GROUP BY province) sub  
+	WHERE sub.max > 300000;
+--Question 7a:
+	SELECT Province 
+	FROM (SELECT Province, Max(Population) AS max 
+		FROM Place 
+		GROUP BY province) sub 
+	WHERE sub.max < 300000;
+--Question 7b:
+	SELECT DISTINCT Province 
+	FROM Place 
+	EXCEPT ALL 
+	SELECT Province 
+	FROM (SELECT Province, Max(Population) AS max 
+		FROM Place 
+		GROUP BY province) sub  
+	WHERE sub.max > 300000;
+--Question 8:
+	SELECT province, avg(Population), Max(Population) 
+	FROM Place 
+	GROUP BY province 
+	ORDER BY province;
+--Question 9:
+	SELECT name, province 
+	FROM Place 
+	WHERE population = (SELECT Max(Population) 
+				FROM Place);
+--Question 10 (works with MySQL):
+	SELECT Person.pid, group_concat(Property.name) AS PlacesLivedIn 
+	FROM Person 
+	LEFT OUTER JOIN Property ON Person.pid = Property.pid 
+	GROUP BY pid;
+--Question 11 (works with MySQL):
+	SELECT Person.pid, group_concat(Property.name) AS PlacesLivedIn, COUNT(Property.name) AS NumberPlaces 
+	FROM Person 
+	LEFT OUTER JOIN Property 
+	ON Person.pid = Property.pid 
+	GROUP BY pid;
+--Question 12:
