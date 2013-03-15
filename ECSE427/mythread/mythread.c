@@ -220,16 +220,16 @@ void destroy_semaphore(int semaphore){
 
 //marks the start of a threads current run on the cpu
 void start_timer(int thread){
-	struct timespec time;
-	clock_gettime(CLOCK_REALTIME, &time);
-	threads[thread].time_block_begin = time.tv_nsec;
+	struct timeval time;
+	gettimeofday(&time, NULL);
+	threads[thread].time_block_begin = (time.tv_sec * 1000000 + time.tv_usec);
 }
 
 //marks the end of a threads run on the cpu saves the amount of time
 void stop_timer(int thread){
-	struct timespec time;
-	clock_gettime(CLOCK_REALTIME, &time);
-	threads[thread].cpu_run_time += time.tv_nsec - threads[thread].time_block_begin;
+	struct timeval time;
+	gettimeofday(&time, NULL);
+	threads[thread].cpu_run_time += (time.tv_sec * 1000000 + time.tv_usec) - threads[thread].time_block_begin;
 }
 
 //translates the THREAD_STATE enum into strings
@@ -249,7 +249,7 @@ void mythread_state(){
 	printf("--------------------------------------------------------------------------\n");
 	int i;
 	for (i=0;i<next_thread;i++){
-		printf("%d\t\t%s\t%s\t\t%f\n",threads[i].thread_id,threads[i].thread_name, getStateString(threads[i].state), threads[i].cpu_run_time/1000.0);
+		printf("%d\t\t%s\t%s\t\t%d\n",threads[i].thread_id,threads[i].thread_name, getStateString(threads[i].state), threads[i].cpu_run_time);
 	}
 }
 
