@@ -4,35 +4,35 @@ Michael Carruthers
 
 The makefile included creates the mythread test program. It is identical to the one provided except that the include is slightly different. The header file is different and matches my implementation.
 
-Everything is implemented, however, for some odd reason, 9 times out of 10 it segfaults. It's an issue with the runqueue. On occasion when there is only 1 item on the queue, it adds the item twice (i.e. the runqueue would read (2,2)). However, it works for the vast majority of the time.
+Everything is implemented, however, for some odd reason on my computer, 9 times out of 10 it segfaults. On ubuntu.cs.mcgill.ca it segfaults more often. It's an issue with the runqueue. On occasion when there is only 1 item on the queue, it adds the item twice (i.e. the runqueue would read (2,2)). However, it works for the vast majority of the time.
 
 Here's the output from the program:
 
-	~/Coding/School/ECSE427/mythread(branch:master*) » mythread-test
-	Thread ID	Thread Name	Thread State	CPU time (in microseconds)
-	--------------------------------------------------------------------------
-	0		thread 0	RUNNABLE		0.000000
-	1		thread 1	RUNNABLE		0.000000
-	2		thread 2	RUNNABLE		0.000000
-	3		thread 3	RUNNABLE		0.000000
-	4		thread 4	RUNNABLE		0.000000
-	5		thread 5	RUNNABLE		0.000000
-	6		thread 6	RUNNABLE		0.000000
-	7		thread 7	RUNNABLE		0.000000
-	8		thread 8	RUNNABLE		0.000000
-	9		thread 9	RUNNABLE		0.000000
-	Thread ID	Thread Name	Thread State	CPU time (in microseconds)
-	--------------------------------------------------------------------------
-	0		thread 0	EXIT		1102.694000
-	1		thread 1	EXIT		1478.221000
-	2		thread 2	EXIT		1265.354000
-	3		thread 3	EXIT		1322.777000
-	4		thread 4	EXIT		1284.043000
-	5		thread 5	EXIT		1450.354000
-	6		thread 6	EXIT		1319.533000
-	7		thread 7	EXIT		1461.482000
-	8		thread 8	EXIT		1309.557000
-	9		thread 9	EXIT		1329.646000
-	The counter is 50
-	The result is 151402.656521
-	>>> Thread library PASSED the Test 1
+Thread ID	Thread Name	Thread State	CPU time (in microseconds)
+--------------------------------------------------------------------------
+0		thread 0	RUNNABLE		0
+1		thread 1	RUNNABLE		0
+2		thread 2	RUNNABLE		0
+3		thread 3	RUNNABLE		0
+4		thread 4	RUNNABLE		0
+5		thread 5	RUNNABLE		0
+6		thread 6	RUNNABLE		0
+7		thread 7	RUNNABLE		0
+8		thread 8	RUNNABLE		0
+9		thread 9	RUNNABLE		0
+Thread ID	Thread Name	Thread State	CPU time (in microseconds)
+--------------------------------------------------------------------------
+0		thread 0	EXIT		880
+1		thread 1	EXIT		858
+2		thread 2	EXIT		1048
+3		thread 3	EXIT		897
+4		thread 4	EXIT		978
+5		thread 5	EXIT		893
+6		thread 6	EXIT		1038
+7		thread 7	EXIT		851
+8		thread 8	EXIT		864
+9		thread 9	EXIT		963
+The counter is 50
+The result is 151402.656521
+>>> Thread library PASSED the Test 1
+
