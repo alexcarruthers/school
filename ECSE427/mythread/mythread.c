@@ -1,21 +1,241 @@
+#include <signal.h>
 #include <slack/std.h>
-//#include <slack/list.h>
+#include <slack/list.h>
 #include <stdio.h>
 #include <ucontext.h>
 #include <string.h>
-#include <signal.h>
 #include <sys/time.h>
-#include "queue.c"
+#include "mythread.h"
 
 #define THREAD_NAME_LENGTH 100
-#define NUMBER_THREADS_SEMAPHORES 100
-void handle_error(char* msg){
-	perror(msg);
-	exit(EXIT_FAILURE); 
-}
+#define THREADS_SEMAPHORES_MAX 100
 
+//enum to describe state of the thread
 typedef enum THREAD_STATE{EXIT, RUNNABLE, RUNNING, BLOCKED} THREAD_STATE;
 
+//define what a thread and semaphore contain
+typedef struct mythread_control_block{
+	ucontext_t context;
+	int thread_id;
+	THREAD_STATE state;
+	char thread_name[THREAD_NAME_LENGTH];
+	int cpu_run_time;
+	long time_block_begin;
+	void *stack;
+}mythread_control_block;
+typedef struct semaphore_t{
+	int semaphore_id;
+	int count;
+	int initial_count;
+	List *waiting_threads;
+}semaphore_t;
+
+//define required lists
+static List *runqueue;
+static semaphore_t sems[THREADS_SEMAPHORES_MAX]; //have maximum 100 semaphores
+static mythread_control_block threads[THREADS_SEMAPHORES_MAX]; //have maximum 100 threads
+
+//define main context
+static ucontext_t uctxt_main;
+
+//next available semaphores and lists
+static int next_thread;
+static int next_semaphore;
+
+static int currently_running_thread;
+static int quantum_size = 0;
+struct itimerval tval;
+
+//initiate mythread
+int mythread_init(){
+	//initiate values
+	runqueue = list_create(NULL);
+	next_semaphore = 0;
+	next_thread = 0;
+	currently_running_thread = -1;
+	return 0;
+}
+
+//create a thread
+int mythread_create(char *threadname, void (*threadfunc)(), int stacksize){
+	if (next_thread == THREADS_SEMAPHORES_MAX) {
+		perror("Max number of threads reached");
+		return -1;
+	}
+	//get the context for the next available thread in the threads
+	//table and set up the context
+	getcontext(&threads[next_thread].context);
+	threads[next_thread].stack = malloc(stacksize);
+	threads[next_thread].context.uc_stack.ss_sp = threads[next_thread].stack;
+	threads[next_thread].context.uc_stack.ss_size = stacksize;
+	threads[next_thread].context.uc_stack.ss_flags = 0;
+	threads[next_thread].context.uc_link = &uctxt_main;
+	sigemptyset(&threads[next_thread].context.uc_sigmask);
+	
+	//initiate all other thread fields
+	threads[next_thread].thread_id = next_thread;
+	threads[next_thread].cpu_run_time = 0;
+	threads[next_thread].state = RUNNABLE;
+	strcpy(threads[next_thread].thread_name, threadname);
+	
+	//create the context
+	makecontext(&threads[next_thread].context, threadfunc, 0);
+
+	//add the thread to the runqueue
+	runqueue = list_append_int(runqueue, threads[next_thread].thread_id);
+	
+	//increment the thread counter so that the next thread can be made
+	next_thread++;
+	
+	return threads[next_thread-1].thread_id;
+	
+}
+
+//marks the currently running thread as exited
+void mythread_exit(){
+	if (currently_running_thread == -1){
+		handle_error("no threads running");
+	}
+	threads[currently_running_thread].state = EXIT;
+	swapcontext(&threads[currently_running_thread].context,&uctxt_main);
+	return;
+}
+
+//run all the threads in the runqueue
+void runthreads(){
+	//check for erroneous states
+	if (quantum_size == 0){
+		handle_error("quantum not set");
+	}
+	if (currently_running_thread == -1){
+		handle_error("No threads initialized");
+	}
+	
+	//define what function to run once SIGALRM is raised
+	sigset(SIGALRM,&SIGALRM_handler);
+	
+	//set up and start the timer 
+	tval.it_interval.tv_sec = 0;
+	tval.it_interval.tv_usec = quantum_size;
+	tval.it_value = tval.it_interval;
+	setitimer(ITIMER_REAL, &tval, 0);
+	
+	//iterate over all threads
+	while(!list_empty(runqueue)){
+		//get the next thread and mark it running
+		currently_running_thread = list_shift_int(runqueue);
+		threads[currently_running_thread].state = RUNNING;
+		//mark when this thread is starting it's time on the cpu
+		start_timer(currently_running_thread);
+		//switch to the desired thread
+		swapcontext(&uctxt_main, &threads[currently_running_thread].context);
+		//mark the end of the thread's time on the cpu and save the elapsed time
+		stop_timer(currently_running_thread);
+		//add thread to the end of the runqueue if it hasnt finished or isn't blocked
+		if(threads[currently_running_thread].state == RUNNABLE || threads[currently_running_thread].state == RUNNING){
+			runqueue = list_append_int(runqueue, currently_running_thread);
+		}
+	}
+}
+
+//function that runs when SIGALRM is signaled
+void SIGALRM_handler(){
+	//switch back to the runthreads function
+	if(!list_empty(runqueue)){
+		swapcontext(&threads[currently_running_thread].context,&uctxt_main);
+	}
+}
+
+//set the quantum size
+void set_quantum_size(int quantum){
+	quantum_size = quantum;
+}
+
+//create a semaphore
+int create_semaphore(int value){
+	if (next_semaphore == THREADS_SEMAPHORES_MAX) {
+		perror("Max number of semaphores reached");
+		return -1;
+	}
+	//initialize all the semaphore values
+	sems[next_semaphore].count = value;
+	sems[next_semaphore].initial_count = value;
+	sems[next_semaphore].waiting_threads = list_create(NULL);
+	sems[next_semaphore].semaphore_id = next_semaphore;
+	next_semaphore++;
+	return next_semaphore - 1;
+}
+
+//waits on a semaphore
+void semaphore_wait(int semaphore){
+	//block all SIGALRMs
+	sigset_t blocker;
+	sigemptyset(&blocker);
+	sigaddset(&blocker, SIGALRM);
+	sigprocmask(SIG_BLOCK, &blocker, NULL);
+	
+	//decrement the semaphore
+	sems[semaphore].count--;
+	//if the thread has to wait, append the thread to the list of waiting semaphores
+	if (sems[semaphore].count < 0){
+		sems[semaphore].waiting_threads = list_append_int(sems[semaphore].waiting_threads, currently_running_thread);
+		threads[currently_running_thread].state = BLOCKED;
+	}
+	
+	//unblock the signals and switch to the next thread
+	sigprocmask(SIG_UNBLOCK, &blocker, NULL);
+	SIGALRM_handler();
+}
+
+//signal a semaphore
+void semaphore_signal(int semaphore){
+	//block signals
+	sigset_t blocker;
+	sigemptyset(&blocker);
+	sigaddset(&blocker, SIGALRM);
+	sigprocmask(SIG_BLOCK, &blocker, NULL);
+	
+	//increment the semaphore
+	sems[semaphore].count++;
+	
+	//if the semaphore is low, get the next waiting thread and append it to the runqueue
+	if (sems[semaphore].count <= 0){
+		int to_run = list_shift_int(sems[semaphore].waiting_threads);
+		threads[to_run].state = RUNNABLE;
+		runqueue = list_append_int(runqueue, to_run);
+	}
+	
+	//unblock the signals and run the thread switcher
+	sigprocmask(SIG_UNBLOCK, &blocker, NULL);
+	SIGALRM_handler();
+}
+
+//destroy a semaphore
+void destroy_semaphore(int semaphore){
+	if (!list_empty(sems[semaphore].waiting_threads)) {
+		perror("Can't destroy semaphore while threads waiting on it.");
+	}
+	else if (sems[semaphore].count != sems[semaphore].initial_count){
+		perror("Something went wrong, initial value not equal to current value");
+	}
+	return;
+}
+
+//marks the start of a threads current run on the cpu
+void start_timer(int thread){
+	struct timespec time;
+	clock_gettime(CLOCK_REALTIME, &time);
+	threads[thread].time_block_begin = time.tv_nsec;
+}
+
+//marks the end of a threads run on the cpu saves the amount of time
+void stop_timer(int thread){
+	struct timespec time;
+	clock_gettime(CLOCK_REALTIME, &time);
+	threads[thread].cpu_run_time += time.tv_nsec - threads[thread].time_block_begin;
+}
+
+//translates the THREAD_STATE enum into strings
 const char* getStateString(THREAD_STATE state){
 	switch(state){
 		case EXIT: return "EXIT"; break;
@@ -26,197 +246,18 @@ const char* getStateString(THREAD_STATE state){
 	return "";
 }
 
-typedef struct mythread_control_block{
-	ucontext_t context;
-	int thread_id;
-	THREAD_STATE state;
-	char thread_name[THREAD_NAME_LENGTH];
-	int cpu_run_time;
-	char *stack;
-}mythread_control_block;
-
-typedef struct semaphore_t{
-	int semaphore_id;
-	int count;
-	int initial_count;
-	queue *waiting_threads;
-}semaphore_t;
-
-queue *runqueue;
-semaphore_t *sems[NUMBER_THREADS_SEMAPHORES]; //have maximum 100 semaphores
-mythread_control_block *threads[NUMBER_THREADS_SEMAPHORES]; //have maximum 100 threads
-ucontext_t uctxt_main;
-
-int next_thread;
-int next_semaphore;
-int currently_running_thread;
-int threads_running;
-
-struct sigaction act;
-struct itimerval tval;
-
-ucontext_t sig_context;
-void *sig_stack;
-int sig_stack_size = 4096;
-
-/*void print(List* l){
-	printf("LIST: ");
-	while(list_has_next(l)){
-		printf("%d ", list_next_int(l));
-	}
-	printf("\n");
-}*/
-
-
-void runthreads(){
-	currently_running_thread = get_element(runqueue)->num;
-	printf("RUNNING THREAD: %d\n", currently_running_thread);
-	printf("LIST: ");
-	print_queue(runqueue);
-	setcontext(&threads[currently_running_thread]->context);
-}
-
-void scheduler(){
-	int oldthread = currently_running_thread;
-	currently_running_thread = get_element(runqueue)->num;
-	add_element(runqueue, oldthread);
-	printf("RUNNING THREAD: %d\n", currently_running_thread);
-	printf("LIST: ");
-	print_queue(runqueue);
-	setcontext(&threads[currently_running_thread]->context);
-}
-
-void timer_handler(){
-	//swapcontext(&threads[currently_running_thread]->context,&uctxt_main);
-	printf("HERE?\n");
-	getcontext(&sig_context);
-	sig_context.uc_stack.ss_sp = sig_stack;
-	sig_context.uc_stack.ss_size = sig_stack_size;
-	sig_context.uc_stack.ss_flags = 0;
-	sigemptyset(&sig_context.uc_sigmask);
-	makecontext(&sig_context, scheduler, 0);
-	swapcontext(&threads[currently_running_thread]->context,&sig_context);
-}
-
-void init_signals(){
-	act.sa_sigaction = timer_handler;
-	sigemptyset(&act.sa_mask);
-//	act.sa_flags = SA_RESTART | SA_SIGINFO;
-	if(sigaction(SIGALRM, &act, NULL) != 0) handle_error("Signal Handler");
-	
-}
-
-int mythread_init(){
-	runqueue = create_queue();
-	next_semaphore = 0;
-	next_thread = 0;
-	currently_running_thread = -1;
-	int i;
-	for (i=0; i<NUMBER_THREADS_SEMAPHORES; i++){
-		sems[i] = malloc(sizeof(semaphore_t));
-		threads[i] = malloc(sizeof(mythread_control_block));
-	}
-	
-	sig_stack = malloc(sig_stack_size);
-	
-	tval.it_interval.tv_sec = 0;
-	tval.it_interval.tv_usec = 150;
-	tval.it_value = tval.it_interval;
-	init_signals();
-	return 0;
-}
-
-int mythread_create(char *threadname, void (*threadfunc)(), int stacksize){
-	if (getcontext(&threads[next_thread]->context) == -1){
-		handle_error("getcontext");
-	}
-	threads[next_thread]->stack = malloc(stacksize);
-	threads[next_thread]->context.uc_stack.ss_sp = threads[next_thread]->stack;
-	threads[next_thread]->context.uc_stack.ss_size = sizeof(threads[next_thread]->stack);
-	threads[next_thread]->context.uc_link = &uctxt_main;
-	threads[next_thread]->thread_id = next_thread;
-	threads[next_thread]->cpu_run_time = 0;
-	threads[next_thread]->state = RUNNABLE;
-	sigemptyset(&threads[next_thread]->context.uc_sigmask);
-	makecontext(&threads[next_thread]->context, threadfunc, 0);
-	strcpy(threads[next_thread]->thread_name, threadname);
-	add_element(runqueue, threads[next_thread]->thread_id);
-	next_thread++;
-	return threads[next_thread-1]->thread_id;
-	
-}
-void mythread_exit(){
-	if (currently_running_thread == -1){
-		handle_error("no threads running");
-	}
-	threads[currently_running_thread]->state = EXIT;
-}
-
-void set_quantum_size(int quantum);
-
-
-
-
-
-int create_semaphore(int value){
-	sems[next_semaphore]->count = value;
-	sems[next_semaphore]->initial_count = value;
-	sems[next_semaphore]->waiting_threads = create_queue();
-	sems[next_semaphore]->semaphore_id = next_semaphore;
-	next_semaphore++;
-	return next_semaphore - 1;
-}
-
-void semaphore_wait(int semaphore);
-void semaphore_signal(int semaphore);
-void destroy_semaphore(int semaphore);
+//prints out the state of all the threads
 void mythread_state(){
-	printf("Thread ID\tThread Name\tThread State\tCPU time\n");
+	printf("Thread ID\tThread Name\tThread State\tCPU time (in nanoseconds)\n");
 	printf("--------------------------------------------------\n");
 	int i;
 	for (i=0;i<next_thread;i++){
-		printf("%d\t\t%s\t\t%s\t%d\n",threads[i]->thread_id,threads[i]->thread_name, getStateString(threads[i]->state), threads[i]->cpu_run_time);
+		printf("%d\t\t%s\t\t%s\t%d\n",threads[i].thread_id,threads[i].thread_name, getStateString(threads[i].state), threads[i].cpu_run_time);
 	}
 }
 
-void test1(){
-	int i;
-	printf("test1\n");
-	for (i=1000; i<2000; i++){
-		//printf("%d", i);
-	}
-}
-void test2(){
-	int i;
-	printf("test2\n");
-	for (i=2000; i<3000; i++){
-		//printf("%d", i);
-	}
-}
-void test3(){
-	int i;
-	printf("test3\n");
-	for (i=3000; i<4000; i++){
-		//printf("%d", i);
-	}
-}
-void test4(){
-	int i;
-	printf("test4\n");
-	for (i=4000; i<5000; i++){
-		//printf("%d", i);
-	}
-}
-
-
-int main(){
-	mythread_init();
-	
-	mythread_create("test1",test1,8192);
-	mythread_create("test2",test2,8192);
-	mythread_create("test3",test3,8192);
-	mythread_create("test4",test4,8192);
-	mythread_state();
-	runthreads();
-	return 0;
+//handles error messages and quits
+void handle_error(msg) {
+	perror(msg); 
+	exit(EXIT_FAILURE); 
 }

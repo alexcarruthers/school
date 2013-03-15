@@ -40,8 +40,8 @@ queue_element* get_element(queue* my_queue){
 		return NULL;
 	}
 	else if(my_queue->head == my_queue->tail){
-		my_queue->head == NULL;
-		my_queue->tail == NULL;
+		my_queue->head = NULL;
+		my_queue->tail = NULL;
 		my_queue->length--;
 		return element;
 	}
