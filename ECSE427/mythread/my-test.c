@@ -19,7 +19,7 @@
 #include <stdlib.h>     /* General Utilities */
 #include <math.h>
 
-#include "mythread.c"
+#include "mythread.h"
 
 /* prototype for thread routine */
 void handler ( );

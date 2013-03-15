@@ -10,11 +10,8 @@
 #define THREAD_NAME_LENGTH 100
 #define THREADS_SEMAPHORES_MAX 100
 
-//enum to describe state of the thread
-typedef enum THREAD_STATE{EXIT, RUNNABLE, RUNNING, BLOCKED} THREAD_STATE;
-
 //define what a thread and semaphore contain
-typedef struct mythread_control_block{
+typedef struct {
 	ucontext_t context;
 	int thread_id;
 	THREAD_STATE state;
@@ -23,7 +20,7 @@ typedef struct mythread_control_block{
 	long time_block_begin;
 	void *stack;
 }mythread_control_block;
-typedef struct semaphore_t{
+typedef struct {
 	int semaphore_id;
 	int count;
 	int initial_count;
@@ -107,7 +104,7 @@ void runthreads(){
 	if (quantum_size == 0){
 		handle_error("quantum not set");
 	}
-	if (currently_running_thread == -1){
+	if (next_thread == 0){
 		handle_error("No threads initialized");
 	}
 	
@@ -248,16 +245,16 @@ const char* getStateString(THREAD_STATE state){
 
 //prints out the state of all the threads
 void mythread_state(){
-	printf("Thread ID\tThread Name\tThread State\tCPU time (in nanoseconds)\n");
-	printf("--------------------------------------------------\n");
+	printf("Thread ID\tThread Name\tThread State\tCPU time (in microseconds)\n");
+	printf("--------------------------------------------------------------------------\n");
 	int i;
 	for (i=0;i<next_thread;i++){
-		printf("%d\t\t%s\t\t%s\t%d\n",threads[i].thread_id,threads[i].thread_name, getStateString(threads[i].state), threads[i].cpu_run_time);
+		printf("%d\t\t%s\t%s\t\t%f\n",threads[i].thread_id,threads[i].thread_name, getStateString(threads[i].state), threads[i].cpu_run_time/1000.0);
 	}
 }
 
 //handles error messages and quits
-void handle_error(msg) {
+void handle_error(char *msg) {
 	perror(msg); 
 	exit(EXIT_FAILURE); 
 }

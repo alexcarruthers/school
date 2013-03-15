@@ -13,24 +13,11 @@
 #define THREADS_SEMAPHORES_MAX 100
 
 //enum to describe state of the thread
-typedef enum THREAD_STATE{EXIT, RUNNABLE, RUNNING, BLOCKED} THREAD_STATE;
+typedef enum {EXIT, RUNNABLE, RUNNING, BLOCKED}THREAD_STATE;
 
 //define what a thread and semaphore contain
-typedef struct mythread_control_block{
-	ucontext_t context;
-	int thread_id;
-	THREAD_STATE state;
-	char thread_name[THREAD_NAME_LENGTH];
-	int cpu_run_time;
-	long time_block_begin;
-	void *stack;
-}mythread_control_block;
-typedef struct semaphore_t{
-	int semaphore_id;
-	int count;
-	int initial_count;
-	List *waiting_threads;
-}semaphore_t;
+typedef struct mythread_control_block;
+typedef struct semaphore_t;
 
 //initiate mythread
 int mythread_init();
