@@ -1,6 +1,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include "my_malloc.h"
 
 typedef int policy;
 #define FIRST_FIT 1
@@ -10,14 +11,18 @@ typedef int bool;
 #define true 1
 #define false 0
 
-bool init = false;
+static bool init = false;
 void* sbrk_start;
-void* first_free = NULL;
-int numfree = 0;
+static void* first_free = NULL;
+static int numfree = 0;
+static int total_bytes = 0;
+static int total_free = 0;
+static int largest_free = 0;
 
 //	In case my_mallopt is never called, assuming
 //	first-fit as default
-policy alloc_policy = FIRST_FIT;
+static policy alloc_policy = FIRST_FIT;
+
 
 static void* create_memblock(int size){
 	int* blocklen;
@@ -26,6 +31,7 @@ static void* create_memblock(int size){
 	blocklen = memblock;
 	*blocklen = size;
 	data = memblock + sizeof(int);
+	total_bytes += size + sizeof(int);
 	return data;
 }
 
@@ -117,7 +123,7 @@ static void* unfree_middle_memblock(void* prevmemblock, void* memblock, void* ne
 	}
 	
 	//we have to split the memblock and return the second half
-	void* newmemblock = memblock + *memblock_len - size;
+	void* newmemblock = memblock + *memblock_len - size - sizeof(int);
 	int* newmemblock_len = newmemblock - sizeof(int);
 	*newmemblock_len = size;
 	*memblock_len = *memblock_len - size - sizeof(int);
@@ -142,7 +148,6 @@ void *my_malloc(int size){
 	if (alloc_policy == FIRST_FIT){
 		bool blockfound = false;
 		void* memblock = first_free;
-		void* heap_end = sbrk(0);
 		//loop until we find the first free block with enough room
 		while (memblock != NULL){
 			int* memblock_len = memblock - sizeof(int);
@@ -150,23 +155,60 @@ void *my_malloc(int size){
 				blockfound = true;
 				break;
 			}
-
-			memblock = *(int**)(memblock + sizeof(int) + sizeof(int*));
+			int** next_memblock = memblock + sizeof(int**);
+			memblock = *next_memblock;
 		}
-		if (memblock == NULL || !blockfound){
+		if (!blockfound){
 			return create_memblock(size);
 		}
-		void* next_free_block = *(int**)(memblock + sizeof(int) + sizeof(int*));
-		void* prev_free_block = *(int**)(memblock + sizeof(int));
+		int** next_free_block = memblock + sizeof(int*);
+		int** prev_free_block = memblock;
 		
-		if(prev_free_block == NULL){
+		if(*prev_free_block == NULL){
 			return unfree_first_memblock(size);
 		}
-		if(next_free_block == NULL){
+		if(*next_free_block == NULL){
 			return unfree_last_memblock(memblock, size);
 		}
-		return unfree_middle_memblock(prev_free_block, memblock, next_free_block, size);
-
+		return unfree_middle_memblock(*prev_free_block, memblock, *next_free_block, size);
+	}
+	
+	else if (alloc_policy == BEST_FIT){
+		bool blockfound = false;
+		int best_difference = -1;
+		void* best_location = NULL;
+		void* memblock = first_free;
+		//loop until we find the first free block with enough room
+		while (memblock != NULL){
+			int* memblock_len = memblock - sizeof(int);
+			if (*memblock_len >= size){
+				if (best_difference == -1){
+					best_difference = *memblock_len - (size + sizeof(int));
+					best_location = memblock;
+				}
+				else if (*memblock_len - (size + sizeof(int)) < best_difference){
+					best_difference = *memblock_len - size;
+					best_location = memblock;
+				}
+				blockfound = true;
+			}
+			int** next_memblock = memblock + sizeof(int**);
+			memblock = *next_memblock;
+		}
+		if (!blockfound){
+			return create_memblock(size);
+		}
+		else
+			memblock = best_location;
+		int** next_free_block = memblock + sizeof(int*);
+		int** prev_free_block = memblock;
+		if(*prev_free_block == NULL){
+			return unfree_first_memblock(size);
+		}
+		if(*next_free_block == NULL){
+			return unfree_last_memblock(memblock, size);
+		}
+		return unfree_middle_memblock(*prev_free_block, memblock, *next_free_block, size);
 	}
 	
 	return NULL;
@@ -194,7 +236,7 @@ static void insert_free_memblock_between(void* prevblock, void* nextblock, void*
 		return;
 	}
 	
-	if (memblock + *memblock_len == nextblock){
+	if (memblock + *memblock_len == nextblock_len){
 		if (*nextblock_nextptr != NULL){
 			int** nextnextblock_prevptr = (int**)*nextblock_nextptr;
 			*nextnextblock_prevptr = memblock;
@@ -241,7 +283,7 @@ static void insert_free_memblock_beginning(void* memblock){
 }
 
 //if the memblock to insert into list of free memblocks is after the last free memblock, use this function
-static void insert_free_memblock_end(void* endblock, void* memblock){
+static void insert_free_memblock_end(void* endblock, void* memblock){	
 	//Get all parts of the memory block to insert
 	int* memblock_len = memblock - sizeof(int);
 	int** memblock_prevptr = memblock;
@@ -251,24 +293,22 @@ static void insert_free_memblock_end(void* endblock, void* memblock){
 	int* endblock_len = endblock - sizeof(int);
 	int** endblock_prevptr = endblock;
 	int** endblock_nextptr = endblock + sizeof(int*);
-		
+	
+	
 	if ((endblock + *endblock_len) == memblock_len){
 		*endblock_len = *endblock_len + sizeof(int) + *memblock_len;
-		*endblock_nextptr = memblock;
-		*memblock_nextptr = NULL;
-		*memblock_prevptr = endblock;
+		//*memblock_nextptr = NULL;
+		//*memblock_prevptr = endblock;
 	}
 	else {
 		*memblock_nextptr = NULL;
 		*memblock_prevptr = (int*)endblock;
 		*endblock_nextptr = (int*)memblock;
-		printf("ASDASDASD: %p\n", memblock);
 	}
 }
 
 void my_free(void *ptr){
 	if (first_free == NULL){
-		puts("firstfree");
 		int* blocklen = ptr - sizeof(int);
 		int** pointerprev = ptr;
 		*pointerprev = NULL;
@@ -279,38 +319,27 @@ void my_free(void *ptr){
 	}
 	else {
 		if(ptr < first_free){
-			puts("beginning");
 			insert_free_memblock_beginning(ptr);
 		}
-		int* prev_free_block = first_free;
-		int* next_free_block = NULL;
+		void* prev_free_block = first_free;
+		void* next_free_block = NULL;
 		//loop until we find the free block before the one we want to free
-		while (prev_free_block < (int*)ptr){
+		while (prev_free_block < ptr){
 			//my_mallinfo();
-			printf("%p\n", prev_free_block);
-			int** prev_free_block_nextptr = (int**)(prev_free_block + sizeof(int*));
+			int** prev_free_block_nextptr = prev_free_block + sizeof(int**);
 			next_free_block = *prev_free_block_nextptr;
-			if (next_free_block == NULL){
-				puts("end");
-				
-				printf("prev_free: %p\n", prev_free_block);
-				printf("next_free: %p\n", next_free_block);
+			if (next_free_block == NULL){				
 				insert_free_memblock_end(prev_free_block, ptr);
 				return;
 			}
-			if (next_free_block > (int*)ptr){
+			if (next_free_block > ptr){
 				break;
 			}
 			prev_free_block = next_free_block;
 		}
-		puts("malloc");
-		if(next_free_block == NULL){
-			insert_free_memblock_end(prev_free_block, ptr);
-		}
-		else {
-			insert_free_memblock_between(prev_free_block, next_free_block, ptr);
-			puts("between");
-		}
+		
+		insert_free_memblock_between(prev_free_block, next_free_block, ptr);
+		
 	}
 }
 
@@ -322,9 +351,16 @@ void my_mallopt(int policy){
 
 void my_mallinfo(){
 	void* memblock = first_free;
+	printf("Total bytes allocated: %d\n", total_bytes);
+	printf("All free blocks:\n---------------------------------------\n");
 	while (memblock != NULL){
 		int* memblock_len = memblock - sizeof(int);
-		printf("Free Block Size: %d Location: %p\n", *memblock_len, memblock);
+		total_free += *memblock_len;
+		if (*memblock_len > largest_free)
+			largest_free = *memblock_len;
+		printf("\tSize: %d Location: %p\n", *memblock_len, memblock);
 		memblock = *(int**)(memblock + sizeof(int*));
 	}
+	printf("Total free bytes: %d\n", total_free);
+	printf("Largest free block: %d\n", largest_free);
 }

@@ -14,12 +14,19 @@
  * =====================================================================================
  */
 /* Includes */
-#include<unistd.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 // Uncomment the following line -- this should be your header file
-#include "my_malloc.c"	
+#include "my_malloc.h"	
+
+// We assume you have defined the following two definitions
+// If so, you should remove these..
+// If not, move them to your mymalloc.h file
+#define FIRST_FIT                         1
+#define BEST_FIT                          2
+
 
 
 // Comment out the following 4 lines
@@ -54,7 +61,6 @@ int main(int argc, char *argv[])
 	// Allocating 32 kbytes of memory..
 	for(i=0; i<32;i++)					
 		c[i] = (char*)my_malloc(1024);
-		
 	// Now deallocating some of the slots ..to free
 	for(i=10; i<18;i++)
 		my_free(c[i]);
@@ -97,10 +103,10 @@ int main(int argc, char *argv[])
 	// Allocating 512 kbytes of memory..
 	for(i=0; i<32;i++)					
 		c[i] = (char*)my_malloc(16*1024);
-	puts("NOW FREEING");
+
 	// Now deallocating some of the slots ..to free
-	my_free(c[30]);
 	my_free(c[31]);
+	my_free(c[30]);
 	my_free(c[29]);
 	my_free(c[28]);
 	my_free(c[27]);
@@ -114,7 +120,6 @@ int main(int argc, char *argv[])
 	my_free(c[9]);
 	my_free(c[8]);
 
-	//my_mallinfo();
 	char *cp2 = my_malloc(16*1024*2);
 
 	if (cp2 == c[8] || cp2 == c[9])
@@ -122,7 +127,7 @@ int main(int argc, char *argv[])
 	else
 	  puts("\t\t\t\t Failed");
 
-	/*
+	
 	my_free(cp2);
 	// Now try the other method...
 
@@ -137,7 +142,7 @@ int main(int argc, char *argv[])
 	  puts("\t\t\t\t Failed");
 
 	puts("Print some information..");
-	my_mallinfo();*/
+	my_mallinfo();
 
 	return(0);
 }
