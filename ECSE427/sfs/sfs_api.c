@@ -90,7 +90,7 @@ void mksfs(int fresh){
 
 void sfs_ls(void){
 	printf("_____ROOT_____\n");
-	printf("Name\t\t\tsize\n");
+	printf("Name\t\tsize\n");
 	int i=0;
 	for(i=0; i<MAX_NUM_FILES; i++){
 		if (files[i].created){
@@ -106,6 +106,7 @@ int sfs_open(char *name){
 			break;
 		}
 	}
+
 	if (found){ //now have to open the file
 		fdt[i][open]=true;
 		fdt[i][read_ptr]=0;
@@ -117,11 +118,12 @@ int sfs_open(char *name){
 		//find the next free file id
 		int fileid = -1;
 		for (i=0; i<MAX_NUM_FILES; i++){
-			if (files[i].created == -1){
+			if (files[i].created == false){
 				fileid = i;
 				break;
 			}
 		}
+
 		if (fileid == -1) return -1;
 		
 		//set all the file information
@@ -140,6 +142,7 @@ int sfs_open(char *name){
 		fdt[fileid][open]=true;
 		fdt[fileid][read_ptr]=0;
 		fdt[fileid][write_ptr]=0;
+
 		return fileid;
 	}
 }
@@ -163,7 +166,7 @@ int sfs_write(int fileID, char *buf, int length){
 	}
 	
 	//we must find the block where the file ends
-	int numWrittenBlocks = files[fileID].size % BLOCK_SIZE;
+	int numWrittenBlocks = files[fileID].size / BLOCK_SIZE;
 	
 	int i;
 	for(i=0; i < numWrittenBlocks; i++)
@@ -204,4 +207,53 @@ int sfs_write(int fileID, char *buf, int length){
 	write_fs_blocks();
 	return numBytesWritten;
 }
-int sfs_read(int fileID, char *buf, int length);
+int sfs_read(int fileID, char *buf, int length){
+	if(fdt[fileID][open] == false) return -1;
+	if(fileID > MAX_NUM_FILES || fileID < 0) return -1;
+	
+	int fatEntry = files[fileID].fatIndex;
+	//if this is the first time writing to this file, return nothing
+	if(fat[fatEntry][block_index] == unused){
+		return 0;
+	}
+	
+	//we must find the block where the read ptr is
+	int numWrittenBlocks = fdt[fileID][read_ptr] / BLOCK_SIZE;
+	
+	int i;
+	for(i=0; i < numWrittenBlocks; i++)
+		fatEntry = fat[fatEntry][next];
+	
+	//need to read the rest of this block
+	char block[BLOCK_SIZE];
+	read_blocks(fat[fatEntry][block_index], 1, &block);
+	int numBytes;
+	if (length < (BLOCK_SIZE - files[fileID].size % BLOCK_SIZE))
+		numBytes = length;
+	else
+		numBytes = BLOCK_SIZE - files[fileID].size % BLOCK_SIZE;
+	
+	memcpy(block + (files[fileID].size % BLOCK_SIZE), buf, numBytes);
+	int numBytesRead = numBytes;
+	
+	//now we can read entire blocks until no more bytes need to be
+	//read
+	while(numBytesRead < length){
+		fatEntry = fat[fatEntry][next];
+		if((length - numBytesRead) >= BLOCK_SIZE){
+			read_blocks(fat[fatEntry][block_index], 1, buf+numBytesRead);
+			numBytesRead +=BLOCK_SIZE;
+		}
+		else{
+			read_blocks(fat[fatEntry][block_index], 1, &block);
+			memcpy(buf+numBytesRead, &block, length - numBytesRead);
+			numBytesRead += length-numBytesRead;
+		}
+		if (fat[fatEntry][next] == eof)
+			break;
+	}
+	
+	//update read pointer
+	fdt[fileID][read_ptr] += numBytesRead;
+	return numBytesRead;
+}

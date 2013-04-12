@@ -160,5 +160,6 @@ main(int argc, char **argv)
     }
 
     fprintf(stderr, "Test program exiting with %d errors\n", error_count);
+    
     return (error_count);
 }
