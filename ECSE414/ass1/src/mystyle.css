@@ -1,0 +1,39 @@
+body {
+	background-color:#FFFFFF;
+	color:#333333;
+	font-family: Lucida Grande, Helvetica, Verdana, sans serif;
+}
+
+a {
+	text-decoration:none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+hr {
+	border-top: 1px solid #888888;
+	border-bottom: 1px solid #888888;
+}
+
+h1 {
+	font-size: xx-large;
+	font-weight: bold;
+}
+
+h2 {
+	font-size: x-large;
+	font-weight: bold;
+}
+
+h3 {
+	font-size: large;
+	font-weight: bold;
+}
+
+h4 {
+	font-weight: bold;
+}
+
+li {padding: 10px 0 0 0;}
