@@ -1,0 +1,9 @@
+README
+Because it was not apparent in the description of this assignment, I 
+made the writes append to the end of the file (which means there is a 
+seperate write and read pointer. However, for whatever reason, it does
+not read and write from/to the same location. If I write to a new file
+and then read what I wrote, it's not the same thing that comes out.
+However, using the test program, the characters are sequential, meaning
+the read and write works mostly. There's just something funny with the
+pointers.

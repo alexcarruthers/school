@@ -94,7 +94,7 @@ void sfs_ls(void){
 	int i=0;
 	for(i=0; i<MAX_NUM_FILES; i++){
 		if (files[i].created){
-			printf("%s\t%iBytes\n", files[i].name, files[i].size);
+			printf("%s\t%dBytes\n", files[i].name, files[i].size);
 		}
 	}
 }
@@ -174,15 +174,15 @@ int sfs_write(int fileID, char *buf, int length){
 	
 	//need to append to the rest of this block
 	char block[BLOCK_SIZE];
-	read_blocks(fat[fatEntry][block_index], 1, &block);
+	read_blocks(fat[fatEntry][block_index], 1, block);
 	int numBytes;
-	if (length < (BLOCK_SIZE - files[fileID].size % BLOCK_SIZE))
+	if (length < (BLOCK_SIZE - fdt[fileID][write_ptr] % BLOCK_SIZE))
 		numBytes = length;
 	else
-		numBytes = BLOCK_SIZE - files[fileID].size % BLOCK_SIZE;
-	
-	memcpy(block + (files[fileID].size % BLOCK_SIZE), buf, numBytes);
-	write_blocks(fat[fatEntry][block_index], 1, &block);
+		numBytes = BLOCK_SIZE - fdt[fileID][write_ptr] % BLOCK_SIZE;
+	memcpy(block + (fdt[fileID][write_ptr] % BLOCK_SIZE), buf, numBytes);
+	write_blocks(fat[fatEntry][block_index], 1, block);
+	fdt[fileID][write_ptr] += numBytes;
 	int numBytesWritten = numBytes;
 	
 	//now we can write entire blocks until no more bytes need to be
@@ -195,15 +195,16 @@ int sfs_write(int fileID, char *buf, int length){
 		write_blocks(fat[fatEntry][block_index], 1, buf+numBytesWritten);
 		if((length - numBytesWritten) >= BLOCK_SIZE){
 			numBytesWritten +=BLOCK_SIZE;
+			fdt[fileID][write_ptr] +=BLOCK_SIZE;
 		}
 		else{
 			numBytesWritten += length-numBytesWritten;
+			fdt[fileID][write_ptr] += length-numBytesWritten;
 		}
 	}
 	
 	//update sizes and pointers and write file system blocks to disk
 	files[fileID].size += numBytesWritten;
-	fdt[fileID][write_ptr] += numBytesWritten;
 	write_fs_blocks();
 	return numBytesWritten;
 }
@@ -226,14 +227,15 @@ int sfs_read(int fileID, char *buf, int length){
 	
 	//need to read the rest of this block
 	char block[BLOCK_SIZE];
-	read_blocks(fat[fatEntry][block_index], 1, &block);
+	read_blocks(fat[fatEntry][block_index], 1, block);
 	int numBytes;
-	if (length < (BLOCK_SIZE - files[fileID].size % BLOCK_SIZE))
+	if (length < (BLOCK_SIZE - fdt[fileID][read_ptr] % BLOCK_SIZE))
 		numBytes = length;
 	else
-		numBytes = BLOCK_SIZE - files[fileID].size % BLOCK_SIZE;
+		numBytes = BLOCK_SIZE - fdt[fileID][read_ptr] % BLOCK_SIZE;
 	
-	memcpy(block + (files[fileID].size % BLOCK_SIZE), buf, numBytes);
+	memcpy(block + (fdt[fileID][read_ptr] % BLOCK_SIZE), buf, numBytes);
+	fdt[fileID][read_ptr] += numBytes;
 	int numBytesRead = numBytes;
 	
 	//now we can read entire blocks until no more bytes need to be
@@ -241,19 +243,20 @@ int sfs_read(int fileID, char *buf, int length){
 	while(numBytesRead < length){
 		fatEntry = fat[fatEntry][next];
 		if((length - numBytesRead) >= BLOCK_SIZE){
-			read_blocks(fat[fatEntry][block_index], 1, buf+numBytesRead);
+			read_blocks(fat[fatEntry][block_index], 1, block);
+			memcpy(buf+numBytesRead, &block, BLOCK_SIZE);
+			fdt[fileID][read_ptr] += BLOCK_SIZE;
 			numBytesRead +=BLOCK_SIZE;
 		}
 		else{
-			read_blocks(fat[fatEntry][block_index], 1, &block);
+			read_blocks(fat[fatEntry][block_index], 1, block);
 			memcpy(buf+numBytesRead, &block, length - numBytesRead);
 			numBytesRead += length-numBytesRead;
+			fdt[fileID][read_ptr] += length-numBytesRead;
 		}
 		if (fat[fatEntry][next] == eof)
 			break;
 	}
 	
-	//update read pointer
-	fdt[fileID][read_ptr] += numBytesRead;
 	return numBytesRead;
 }

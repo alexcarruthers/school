@@ -23,10 +23,6 @@
 #define MAX_BYTES 30000 /* Maximum file size I'll try to create */
 #define MIN_BYTES 10000         /* Minimum file size */
 
-/* Just a random test string.
-*/
-static char test_str[] = "I am the new tester. I am the replacement for much maligned old tester!\n";
-
 /* rand_name() - return a randomly-generated, but legal, file name.
  *
  * This function creates a filename of the form xxxxxxxx.xxx, where
@@ -63,12 +59,9 @@ main(int argc, char **argv)
     int i, j, k;
     int chunksize;
     char *buffer;
-    char fixedbuf[1024];
     int fds[MAX_FD];
     char *names[MAX_FD];
     int filesize[MAX_FD];
-    int nopen;                    /* Number of files simultaneously open */
-    int ncreate;                  /* Number of files created in directory */
     int error_count = 0;
     int tmp;
 
@@ -128,7 +121,7 @@ main(int argc, char **argv)
       sfs_close(fds[i]);
 
     sfs_ls();
-
+	
     for (i = 0; i < 5; i++)
       fds[i] = sfs_open(names[i]);
 
@@ -147,6 +140,7 @@ main(int argc, char **argv)
                 exit(-1);
             }
             sfs_read(fds[i], buffer, chunksize);
+            puts(buffer);
             for (k = 0; k < chunksize; k++) {
                 if (buffer[k] != (char)(j+k)) {
                     fprintf(stderr, "ERROR: data error at offset %d in file %s (%x,%x)\n",
